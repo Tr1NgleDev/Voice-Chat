@@ -1,14 +1,17 @@
 {
-  id: "tr1ngledev.4dmod-example",
-  name: "4DMod Example",
+  id: "tr1ngledev.voice-chat",
+  name: "Voice-Chat",
   author: "Tr1NgleDev",
-  description: "An example mod",
+  description: "Adds Proximity Voice Chat to multiplayer!",
   version: "1.0",
   gameVersion: "0.2.1.4",
   modDLL: "4DMod.dll",
   externalDLLs: [
+    "opus.dll",
+    "RtAudio.dll"
   ],
   dependencies: {
-    // "tr1ngledev.4dkeybinds": "? before > 1.0" // "?" is an optional dependency, "before" makes the dependency load before this mod, "> 1.0" dependency with version bigger than 1.0
+    "tr1ngledev.4dkeybinds": "? before > 1.0",
+    "tr1ngledev.sync": ""
   },
 }
