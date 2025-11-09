@@ -47,20 +47,16 @@ bool VoiceInstance::hasEnded()
 std::atomic<bool> voiceChatConnected = false;
 double inputValue = -100.0;
 MicFilter micFilter{ -50, 0.05, 0.1, 1.0, SAMPLE_RATE };
-int rtCallbackSimple(void* outBuff, void* inBuff, uint32_t buffFrames, double streamTime, RtAudioStreamStatus status, void* user)
+void inputCallbackSimple(Audijo::Buffer<int16_t>& input, Audijo::Buffer<int16_t>& output, Audijo::CallbackInfo info)
 {
-	int16_t* in = (int16_t*)inBuff;
-
 	double sum = 0.0;
-	for (size_t i = 0; i < buffFrames; i++)
-		sum += in[i] * in[i];
-	double v = std::sqrt(sum / buffFrames);
+	for (size_t i = 0; i < input.Frames(); ++i)
+		sum += input.data()[0][i] * input.data()[0][i];
+	double v = std::sqrt(sum / input.Frames());
 
 	double dB = 20.0 * std::log10(v / (double)INT16_MAX + 1e-10);
 
 	inputValue = dB;
-
-	return 0;
 }
 #endif
 

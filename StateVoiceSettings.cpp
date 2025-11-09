@@ -131,12 +131,11 @@ void StateVoiceSettings::init(StateManager& s)
 
 		deviceNames.clear();
 		deviceNames.emplace_back("Default");
-		auto devices = rtaudio.getDeviceIds();
+		auto devices = audioStream.Devices();
 		for (auto& dev : devices)
 		{
-			auto info = rtaudio.getDeviceInfo(dev);
-			if (info.inputChannels)
-				deviceNames.emplace_back(info.name);
+			if (dev.inputChannels)
+				deviceNames.emplace_back(dev.name);
 		}
 
 		int inputDevice = glm::clamp(config.inputDevice, -1, (int)deviceNames.size() - 2);
@@ -163,28 +162,25 @@ void StateVoiceSettings::init(StateManager& s)
 
 				if (StateVoiceSettings::instanceObj.startedStream)
 				{
-					if (rtaudio.isStreamOpen())
+					if (audioStream.Information().state != Audijo::StreamState::Closed)
 					{
-						rtaudio.stopStream();
-						rtaudio.closeStream();
-						rtaudio.abortStream();
-						while (rtaudio.isStreamOpen());
+						audioStream.Close();
+						while (audioStream.Information().state != Audijo::StreamState::Closed);
 					}
 
-					uint32_t device = pickInputDevice(config.inputDevice);
+					int device = pickInputDevice(config.inputDevice);
 					if (device)
 					{
-						RtAudio::StreamParameters params
-						{
-							device,
-							1,
-							0
-						};
-						uint32_t sampleRate = SAMPLE_RATE;
-						uint32_t bufferFrames = FRAME_SIZE;
+						audioStream.Callback(inputCallbackSimple);
 
-						rtaudio.openStream(NULL, &params, RTAUDIO_SINT16, sampleRate, &bufferFrames, &rtCallbackSimple, nullptr);
-						rtaudio.startStream();
+						audioStream.Open({
+							.input = device,
+							.output = Audijo::NoDevice,
+							.bufferSize = FRAME_SIZE,
+							.sampleRate = SAMPLE_RATE,
+							.resampling = true
+							});
+						audioStream.Start();
 					}
 				}
 				else
@@ -460,24 +456,23 @@ void StateVoiceSettings::init(StateManager& s)
 	updateProjection({ width, height });
 
 	startedStream = false;
-	if (!rtaudio.isStreamOpen())
+	if (audioStream.Information().state == Audijo::StreamState::Closed)
 	{
 		startedStream = true;
 
-		uint32_t device = pickInputDevice(config.inputDevice);
+		int device = pickInputDevice(config.inputDevice);
 		if (device)
 		{
-			RtAudio::StreamParameters params
-			{
-				device,
-				1,
-				0
-			};
-			uint32_t sampleRate = SAMPLE_RATE;
-			uint32_t bufferFrames = FRAME_SIZE;
+			audioStream.Callback(inputCallbackSimple);
 
-			rtaudio.openStream(NULL, &params, RTAUDIO_SINT16, sampleRate, &bufferFrames, &rtCallbackSimple, nullptr);
-			rtaudio.startStream();
+			audioStream.Open({
+				.input = device,
+				.output = Audijo::NoDevice,
+				.bufferSize = FRAME_SIZE,
+				.sampleRate = SAMPLE_RATE,
+				.resampling = true
+				});
+			audioStream.Start();
 		}
 	}
 }
@@ -592,11 +587,10 @@ void StateVoiceSettings::close(StateManager& s)
 
 	if (startedStream)
 	{
-		if (rtaudio.isStreamOpen())
+		if (audioStream.Information().state != Audijo::StreamState::Closed)
 		{
-			rtaudio.stopStream();
-			rtaudio.closeStream();
-			rtaudio.abortStream();
+			audioStream.Close();
+			while (audioStream.Information().state != Audijo::StreamState::Closed);
 		}
 		startedStream = false;
 	}

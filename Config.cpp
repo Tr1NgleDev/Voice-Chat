@@ -4,7 +4,7 @@
 #include <fstream>
 
 Config config{};
-RtAudio rtaudio{};
+Stream<Audijo::Wasapi> audioStream{};
 boost::uuids::random_generator uuidGen{};
 
 using namespace fdm;

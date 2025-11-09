@@ -58,7 +58,7 @@ uint32_t MicFilter::getSampleRate()
 double MicFilter::process(int16_t* buff, size_t samples)
 {
 	double sum = 0.0;
-	for (size_t i = 0; i < samples; i++)
+	for (size_t i = 0; i < samples; ++i)
 		sum += buff[i] * buff[i];
 	double v = std::sqrt(sum / samples);
 

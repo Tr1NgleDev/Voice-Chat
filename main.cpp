@@ -9,7 +9,6 @@ initDLL
 
 #include "Packets.h"
 
-#include <RtAudio.h>
 #include "Buffer.h"
 #include <opus/opus.h>
 #include "Voice.h"
@@ -223,32 +222,27 @@ void decoderThreadFunc()
 
 static int16_t* postProcessingBuffer = nullptr;
 static bool inputEnv = 0.0;
-int rtCallback(void* outBuff, void* inBuff, uint32_t buffFrames, double streamTime, RtAudioStreamStatus status, void* user)
+void inputCallback(Audijo::Buffer<int16_t>& input, Audijo::Buffer<int16_t>& output, Audijo::CallbackInfo info)
 {
 	if (stateManager->states.back() == &StateVoiceSettings::instanceObj)
 	{
-		rtCallbackSimple(outBuff, inBuff, buffFrames, streamTime, status, user);
+		inputCallbackSimple(input, output, info);
 	}
 
-	if (!user) return 0;
-	if (!voiceChatConnected) return 0;
-	if (!postProcessingBuffer) return 0;
-	if (!talking) return 0;
-	if (config.muted) return 0;
-	if (config.deafened) return 0;
+	if (!voiceChatConnected) return;
+	if (!postProcessingBuffer) return;
+	if (!talking) return;
+	if (config.muted) return;
+	if (config.deafened) return;
 
-	Buffer<int16_t>* buff = (Buffer<int16_t>*)user;
-	const int16_t* in = (const int16_t*)inBuff;
-	std::memcpy(postProcessingBuffer, in, buffFrames * sizeof(int16_t));
+	std::memcpy(postProcessingBuffer, input.data()[0], input.Frames() * sizeof(int16_t));
 
 	double vOg = 0.0;
-	double v = micFilter.process(postProcessingBuffer, buffFrames);
+	double v = micFilter.process(postProcessingBuffer, input.Frames());
 
 	inputEnv = v;
 
-	buff->push(postProcessingBuffer, buffFrames);
-
-	return 0;
+	buff->push(postProcessingBuffer, input.Frames());
 }
 
 void cleanup()
@@ -257,12 +251,10 @@ void cleanup()
 	{
 		voiceChatConnected = false;
 
-		if (rtaudio.isStreamOpen())
+		if (audioStream.Information().state != Audijo::StreamState::Closed)
 		{
-			rtaudio.stopStream();
-			rtaudio.closeStream();
-			rtaudio.abortStream();
-			while (rtaudio.isStreamOpen());
+			audioStream.Close();
+			while (audioStream.Information().state != Audijo::StreamState::Closed);
 		}
 
 		if (encoderThread.joinable())
@@ -308,28 +300,27 @@ $hook(void, WorldClient, localPlayerInit, Player* player)
 	self->client->sendMessage({ C_VOICE_CHAT_MOD_VERIFICATION, (uint8_t*)&config.vcUUID, sizeof(stl::uuid) });
 }
 
-uint32_t pickInputDevice(int target)
+int pickInputDevice(int target)
 {
-	uint32_t device = rtaudio.getDefaultInputDevice();
 	if (target <= -1)
-		return device;
+		return Audijo::Default;
 
-	auto devices = rtaudio.getDeviceIds();
+	auto devices = audioStream.Devices();
 	int j = 0;
 	for (int i = 0; i < devices.size(); ++i)
 	{
-		if (rtaudio.getDeviceInfo(devices[i]).inputChannels)
+		auto& dev = devices[i];
+		if (dev.inputChannels)
 		{
 			if (j == target)
 			{
-				device = devices[i];
-				return device;
+				return dev.id;
 			}
 			++j;
 		}
 	}
 
-	return device;
+	return Audijo::NoDevice;
 }
 
 $hook(void, WorldClient, handleMessage, const Connection::InMessage& message, Player* player)
@@ -399,18 +390,17 @@ $hook(void, WorldClient, handleMessage, const Connection::InMessage& message, Pl
 	{
 		voiceChatConnected = true;
 
-		uint32_t device = pickInputDevice(config.inputDevice);
-		if (device)
+		int device = pickInputDevice(config.inputDevice);
+		if (device != -1)
 		{
+			if (audioStream.Information().state != Audijo::StreamState::Closed)
+			{
+				audioStream.Close();
+				while (audioStream.Information().state != Audijo::StreamState::Closed);
+			}
+
 			buff = new Buffer<int16_t>(SAMPLE_RATE / 5); // 200ms of samples
 
-			RtAudio::StreamParameters params
-			{
-				device,
-				1,
-				0
-			};
-			uint32_t sampleRate = SAMPLE_RATE;
 			uint32_t bufferFrames = FRAME_SIZE;
 
 			if (postProcessingBuffer)
@@ -418,11 +408,21 @@ $hook(void, WorldClient, handleMessage, const Connection::InMessage& message, Pl
 				free(postProcessingBuffer);
 			}
 
-			rtaudio.openStream(NULL, &params, RTAUDIO_SINT16, sampleRate, &bufferFrames, &rtCallback, buff);
+			audioStream.Callback(inputCallback);
+
+			audioStream.Open({
+				.input = device,
+				.output = Audijo::NoDevice,
+				.bufferSize = FRAME_SIZE,
+				.sampleRate = SAMPLE_RATE,
+				.resampling = true
+			});
+
+			bufferFrames = audioStream.Information().bufferSize;
 
 			postProcessingBuffer = (int16_t*)malloc(bufferFrames * sizeof(int16_t));
 
-			rtaudio.startStream();
+			audioStream.Start();
 
 			encoderThread = std::thread{ encoderThreadFunc, buff };
 			encoderThread.detach();
@@ -669,24 +669,15 @@ void updateConfigValues(bool updateInputDevice)
 	updateMicFilter();
 	updateVoiceVolume();
 
-	uint32_t device = pickInputDevice(config.inputDevice);
-	if (updateInputDevice && voiceChatConnected && device)
+	int device = pickInputDevice(config.inputDevice);
+	if (updateInputDevice && voiceChatConnected && device != -1)
 	{
-		if (rtaudio.isStreamOpen())
+		if (audioStream.Information().state != Audijo::StreamState::Closed)
 		{
-			rtaudio.stopStream();
-			rtaudio.closeStream();
-			rtaudio.abortStream();
-			while (rtaudio.isStreamOpen());
+			audioStream.Close();
+			while (audioStream.Information().state != Audijo::StreamState::Closed);
 		}
 
-		RtAudio::StreamParameters params
-		{
-			device,
-			1,
-			0
-		};
-		uint32_t sampleRate = SAMPLE_RATE;
 		uint32_t bufferFrames = FRAME_SIZE;
 
 		if (postProcessingBuffer)
@@ -694,11 +685,21 @@ void updateConfigValues(bool updateInputDevice)
 			free(postProcessingBuffer);
 		}
 
-		rtaudio.openStream(NULL, &params, RTAUDIO_SINT16, sampleRate, &bufferFrames, &rtCallback, buff);
+		audioStream.Callback(inputCallback);
+
+		audioStream.Open({
+			.input = device,
+			.output = Audijo::NoDevice,
+			.bufferSize = FRAME_SIZE,
+			.sampleRate = SAMPLE_RATE,
+			.resampling = true
+			});
+
+		bufferFrames = audioStream.Information().bufferSize;
 
 		postProcessingBuffer = (int16_t*)malloc(bufferFrames * sizeof(int16_t));
 
-		rtaudio.startStream();
+		audioStream.Start();
 	}
 
 	if (config.deafened)

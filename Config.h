@@ -1,7 +1,7 @@
 #pragma once
 
 #include <4dm.h>
-#include <RtAudio.h>
+#include <Audijo/Audijo.hpp>
 #include <boost/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/uuid/random_generator.hpp>
@@ -10,7 +10,9 @@
 
 using uuid = boost::uuids::uuid;
 
-extern RtAudio rtaudio;
+using Audijo::Stream;
+
+extern Stream<Audijo::Wasapi> audioStream;
 extern boost::uuids::random_generator uuidGen;
 
 struct Config
@@ -36,7 +38,7 @@ void updateVoiceVolume();
 void updateConfigValues(bool updateInputDevice = true);
 void loadConfig();
 void saveConfig();
-uint32_t pickInputDevice(int target);
+int pickInputDevice(int target);
 
 std::string mbName(int button);
 

@@ -39,6 +39,12 @@
     <ClCompile Include="Server.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="libs\audijo\ApiBase.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="libs\audijo\WasapiApi.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="info.json5" />
@@ -75,6 +81,27 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ImgButton.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\audijo\include\Audijo\ApiBase.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\audijo\include\Audijo\Audijo.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\audijo\include\Audijo\basicIncludes.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\audijo\include\Audijo\Buffer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\audijo\include\Audijo\Callback.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\audijo\include\Audijo\RingBuffer.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="libs\audijo\include\Audijo\WasapiApi.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
