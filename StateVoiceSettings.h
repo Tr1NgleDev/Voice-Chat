@@ -24,6 +24,7 @@ public:
 	fdm::gui::Button closeButton;
 	fdm::gui::Text vcVolumeText; // i want the text centered so...
 	fdm::gui::Slider vcVolume;
+	fdm::gui::CheckBox micEnabledCheckbox;
 	std::vector<std::string> deviceNames{};
 	fdm::gui::Text inputDeviceText; // i wanted to use my dropdown class but the names are too long :sob:
 	fdm::gui::Slider inputDeviceSlider;

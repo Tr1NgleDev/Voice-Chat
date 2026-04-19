@@ -3,7 +3,7 @@
   name: "Voice-Chat",
   author: "Tr1NgleDev",
   description: "Adds Proximity Voice Chat to multiplayer!",
-  version: "1.1",
+  version: "1.2",
   gameVersion: "0.2.1.4",
   modDLL: "4DMod.dll",
   externalDLLs: [

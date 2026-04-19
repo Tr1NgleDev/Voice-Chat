@@ -42,7 +42,14 @@ public:
 extern std::atomic<bool> voiceChatConnected;
 extern double inputValue;
 extern MicFilter micFilter;
+extern Buffer<int16_t>* buff;
+extern std::thread encoderThread;
+extern int16_t* postProcessingBuffer;
+extern double inputEnv;
 void inputCallbackSimple(Audijo::Buffer<int16_t>& input, Audijo::Buffer<int16_t>& output, Audijo::CallbackInfo info);
+void initVoiceChatInput();
+void encoderThreadFunc(Buffer<int16_t>* buff);
+void inputCallback(Audijo::Buffer<int16_t>& input, Audijo::Buffer<int16_t>& output, Audijo::CallbackInfo info);
 #endif
 
 extern std::unordered_map<fdm::stl::uuid, fdm::stl::uuid> playerToVC;

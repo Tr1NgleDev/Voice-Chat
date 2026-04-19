@@ -18,6 +18,7 @@ extern boost::uuids::random_generator uuidGen;
 struct Config
 {
 	uuid vcUUID{};
+	bool micEnabled = true;
 	double vcVolume = 1.0;
 	double micVolume = 1.0;
 	double micThreshold = -50;
@@ -36,6 +37,7 @@ extern Config config;
 void updateMicFilter();
 void updateVoiceVolume();
 void updateConfigValues(bool updateInputDevice = true);
+void closeAudioStream();
 void loadConfig();
 void saveConfig();
 int pickInputDevice(int target);

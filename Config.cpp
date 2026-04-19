@@ -16,6 +16,11 @@ void loadConfig()
 
 	nlohmann::json j = nlohmann::json::parse(configFile);
 
+	if (j.contains("micEnabled") && j["micEnabled"].is_boolean())
+		config.micEnabled = j["micEnabled"];
+	else
+		config.micEnabled = true;
+
 	if (j.contains("vcVolume") && j["vcVolume"].is_number_float())
 		config.vcVolume = j["vcVolume"];
 	else
@@ -104,6 +109,7 @@ void saveConfig()
 		{ "inputDevice", config.inputDevice },
 		{ "playerVolume", config.playerVolume },
 		{ "playerNames", config.playerNames },
+		{ "micEnabled", config.micEnabled },
 	};
 	configFile << j.dump(4);
 

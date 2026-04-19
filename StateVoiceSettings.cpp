@@ -78,7 +78,7 @@ void StateVoiceSettings::init(StateManager& s)
 		box.alignX(gui::ALIGN_CENTER_X);
 		box.alignY(gui::ALIGN_CENTER_Y);
 		box.width = 650;
-		box.height = 400;
+		box.height = 400 + 55;
 		box.parent = &ui;
 		ui.addElement(&box);
 
@@ -129,6 +129,51 @@ void StateVoiceSettings::init(StateManager& s)
 			};
 		box.addElement(&vcVolume);
 
+		micEnabledCheckbox = gui::CheckBox{};
+		micEnabledCheckbox.alignX(gui::ALIGN_LEFT);
+		micEnabledCheckbox.alignY(gui::ALIGN_TOP);
+		micEnabledCheckbox.offsetX(100);
+		micEnabledCheckbox.offsetY(105);
+		micEnabledCheckbox.setText("Capture Input");
+		micEnabledCheckbox.checked = config.micEnabled;
+		micEnabledCheckbox.callback = [](void* user, bool checked)
+			{
+				config.micEnabled = checked;
+				StateVoiceSettings::instanceObj.inputDeviceText.color.a = config.micEnabled ? 1.0f : 0.5f;
+				StateVoiceSettings::instanceObj.inputDeviceSlider.clickable = config.micEnabled;
+				if (!config.micEnabled)
+				{
+					closeAudioStream();
+				}
+				else if (audioStream.Information().state == Audijo::StreamState::Closed) // probably always
+				{
+					if (voiceChatConnected)
+					{
+						initVoiceChatInput();
+					}
+					else
+					{
+						StateVoiceSettings::instanceObj.startedStream = true;
+
+						int device = pickInputDevice(config.inputDevice);
+						if (device)
+						{
+							audioStream.Callback(inputCallbackSimple);
+
+							audioStream.Open({
+								.input = device,
+								.output = Audijo::NoDevice,
+								.bufferSize = FRAME_SIZE,
+								.sampleRate = SAMPLE_RATE,
+								.resampling = true
+								});
+							audioStream.Start();
+						}
+					}
+				}
+			};
+		box.addElement(&micEnabledCheckbox);
+
 		deviceNames.clear();
 		deviceNames.emplace_back("Default");
 		auto devices = audioStream.Devices();
@@ -145,47 +190,52 @@ void StateVoiceSettings::init(StateManager& s)
 		inputDeviceText.size = 1;
 		inputDeviceText.alignX(gui::ALIGN_CENTER_X);
 		inputDeviceText.alignY(gui::ALIGN_TOP);
-		inputDeviceText.offsetY(105);
+		inputDeviceText.offsetY(105 + 55);
+		inputDeviceText.color.a = config.micEnabled ? 1.0f : 0.5f;
 		box.addElement(&inputDeviceText);
 
 		inputDeviceSlider = gui::Slider{};
 		inputDeviceSlider.alignX(gui::ALIGN_CENTER_X);
 		inputDeviceSlider.alignY(gui::ALIGN_TOP);
-		inputDeviceSlider.offsetY(100);
+		inputDeviceSlider.offsetY(105 + 55);
 		inputDeviceSlider.range = deviceNames.size() - 1;
 		inputDeviceSlider.width = 400;
 		inputDeviceSlider.value = inputDevice + 1;
+		inputDeviceSlider.clickable = config.micEnabled;
 		inputDeviceSlider.callback = [](void* user, int value)
 			{
 				config.inputDevice = value - 1;
 				StateVoiceSettings::instanceObj.inputDeviceText.setText(std::format("Input: {}", StateVoiceSettings::instanceObj.deviceNames[value]));
 
-				if (StateVoiceSettings::instanceObj.startedStream)
+				if (config.micEnabled)
 				{
-					if (audioStream.Information().state != Audijo::StreamState::Closed)
+					if (StateVoiceSettings::instanceObj.startedStream)
 					{
-						audioStream.Close();
-						while (audioStream.Information().state != Audijo::StreamState::Closed);
+						closeAudioStream();
+
+						int device = pickInputDevice(config.inputDevice);
+						if (device)
+						{
+							audioStream.Callback(inputCallbackSimple);
+
+							audioStream.Open({
+								.input = device,
+								.output = Audijo::NoDevice,
+								.bufferSize = FRAME_SIZE,
+								.sampleRate = SAMPLE_RATE,
+								.resampling = true
+								});
+							audioStream.Start();
+						}
 					}
-
-					int device = pickInputDevice(config.inputDevice);
-					if (device)
+					else
 					{
-						audioStream.Callback(inputCallbackSimple);
-
-						audioStream.Open({
-							.input = device,
-							.output = Audijo::NoDevice,
-							.bufferSize = FRAME_SIZE,
-							.sampleRate = SAMPLE_RATE,
-							.resampling = true
-							});
-						audioStream.Start();
+						updateConfigValues();
 					}
 				}
 				else
 				{
-					updateConfigValues();
+					closeAudioStream();
 				}
 			};
 		box.addElement(&inputDeviceSlider);
@@ -220,13 +270,13 @@ void StateVoiceSettings::init(StateManager& s)
 		micVolumeText.size = 2;
 		micVolumeText.alignX(gui::ALIGN_CENTER_X);
 		micVolumeText.alignY(gui::ALIGN_TOP);
-		micVolumeText.offsetY(160);
+		micVolumeText.offsetY(160 + 55);
 		box.addElement(&micVolumeText);
 
 		micVolume = gui::Slider{};
 		micVolume.alignX(gui::ALIGN_CENTER_X);
 		micVolume.alignY(gui::ALIGN_TOP);
-		micVolume.offsetY(160);
+		micVolume.offsetY(160 + 55);
 		micVolume.range = 200;
 		micVolume.width = 400;
 		micVolume.value = config.micVolume * 100;
@@ -243,7 +293,7 @@ void StateVoiceSettings::init(StateManager& s)
 		thresholdText.size = 2;
 		thresholdText.alignX(gui::ALIGN_CENTER_X);
 		thresholdText.alignY(gui::ALIGN_TOP);
-		thresholdText.offsetY(220);
+		thresholdText.offsetY(220 + 55);
 		box.addElement(&thresholdText);
 
 		volumeMeter = VolumeMeter{};
@@ -251,13 +301,13 @@ void StateVoiceSettings::init(StateManager& s)
 		volumeMeter.height = 10;
 		volumeMeter.alignX(gui::ALIGN_CENTER_X);
 		volumeMeter.alignY(gui::ALIGN_TOP);
-		volumeMeter.offsetY(220 + 25);
+		volumeMeter.offsetY(220 + 25 + 55);
 		box.addElement(&volumeMeter);
 
 		threshold = gui::Slider{};
 		threshold.alignX(gui::ALIGN_CENTER_X);
 		threshold.alignY(gui::ALIGN_TOP);
-		threshold.offsetY(220);
+		threshold.offsetY(220 + 55);
 		threshold.range = 1000;
 		threshold.width = 400;
 		threshold.value = (100 - (-config.micThreshold)) * 10;
@@ -273,7 +323,7 @@ void StateVoiceSettings::init(StateManager& s)
 		pushToTalkCheckbox.alignX(gui::ALIGN_LEFT);
 		pushToTalkCheckbox.alignY(gui::ALIGN_TOP);
 		pushToTalkCheckbox.offsetX(100);
-		pushToTalkCheckbox.offsetY(280);
+		pushToTalkCheckbox.offsetY(280 + 55);
 		pushToTalkCheckbox.setText("Push To Talk");
 		pushToTalkCheckbox.checked = config.pushToTalk;
 		pushToTalkCheckbox.callback = [](void* user, bool checked)
@@ -287,7 +337,7 @@ void StateVoiceSettings::init(StateManager& s)
 		pushToTalkToggleCheckbox.alignX(gui::ALIGN_LEFT);
 		pushToTalkToggleCheckbox.alignY(gui::ALIGN_TOP);
 		pushToTalkToggleCheckbox.offsetX(100);
-		pushToTalkToggleCheckbox.offsetY(280 + 30);
+		pushToTalkToggleCheckbox.offsetY(280 + 30 + 55);
 		pushToTalkToggleCheckbox.setText("Toggle Mode");
 		pushToTalkToggleCheckbox.checked = config.pushToTalkToggle;
 		pushToTalkToggleCheckbox.clickable = config.pushToTalk;
@@ -301,7 +351,7 @@ void StateVoiceSettings::init(StateManager& s)
 		pushToTalkBind.alignX(gui::ALIGN_RIGHT);
 		pushToTalkBind.alignY(gui::ALIGN_TOP);
 		pushToTalkBind.offsetX(-100);
-		pushToTalkBind.offsetY(280);
+		pushToTalkBind.offsetY(280 + 55);
 		pushToTalkBind.setText(mbName(config.pushToTalkMouseBind));
 		pushToTalkBind.width = 110;
 		pushToTalkBind.height = 50;
@@ -456,7 +506,7 @@ void StateVoiceSettings::init(StateManager& s)
 	updateProjection({ width, height });
 
 	startedStream = false;
-	if (audioStream.Information().state == Audijo::StreamState::Closed)
+	if (config.micEnabled && audioStream.Information().state == Audijo::StreamState::Closed)
 	{
 		startedStream = true;
 

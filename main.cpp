@@ -96,8 +96,6 @@ struct PlayerVoice
 };
 static std::mutex playerVoicesMutex;
 static std::unordered_map<stl::uuid, std::unique_ptr<PlayerVoice>> playerVoices;
-static Buffer<int16_t>* buff = nullptr;
-static std::thread encoderThread;
 static std::thread decoderThread;
 static bool talking = false;
 
@@ -106,6 +104,7 @@ static bool talking = false;
 void encoderThreadFunc(Buffer<int16_t>* buff)
 {
 	if (!voiceChatConnected) return;
+	if (!config.micEnabled) return;
 
 	int err;
 	OpusEncoder* encoder = opus_encoder_create(SAMPLE_RATE, 1, OPUS_APPLICATION, &err);
@@ -124,7 +123,7 @@ void encoderThreadFunc(Buffer<int16_t>* buff)
 
 	PacketVoiceCS& packet = *(PacketVoiceCS*)packetData.data();
 
-	while (voiceChatConnected)
+	while (voiceChatConnected && config.micEnabled)
 	{
 		while (buff->available() < FRAME_SIZE)
 		{
@@ -133,6 +132,7 @@ void encoderThreadFunc(Buffer<int16_t>* buff)
 		}
 
 		if (!voiceChatConnected) break;
+		if (!config.micEnabled) break;
 
 		buff->pop(frame.data(), FRAME_SIZE);
 
@@ -220,8 +220,16 @@ void decoderThreadFunc()
 	}
 }
 
-static int16_t* postProcessingBuffer = nullptr;
-static bool inputEnv = 0.0;
+void closeAudioStream()
+{
+	if (audioStream.Information().state != Audijo::StreamState::Closed)
+	{
+		audioStream.Close();
+		while (audioStream.Information().state != Audijo::StreamState::Closed);
+		inputEnv = 0.0;
+	}
+}
+
 void inputCallback(Audijo::Buffer<int16_t>& input, Audijo::Buffer<int16_t>& output, Audijo::CallbackInfo info)
 {
 	if (stateManager->states.back() == &StateVoiceSettings::instanceObj)
@@ -234,6 +242,7 @@ void inputCallback(Audijo::Buffer<int16_t>& input, Audijo::Buffer<int16_t>& outp
 	if (!talking) return;
 	if (config.muted) return;
 	if (config.deafened) return;
+	if (!config.micEnabled) return;
 
 	std::memcpy(postProcessingBuffer, input.data()[0], input.Frames() * sizeof(int16_t));
 
@@ -251,11 +260,7 @@ void cleanup()
 	{
 		voiceChatConnected = false;
 
-		if (audioStream.Information().state != Audijo::StreamState::Closed)
-		{
-			audioStream.Close();
-			while (audioStream.Information().state != Audijo::StreamState::Closed);
-		}
+		closeAudioStream();
 
 		if (encoderThread.joinable())
 		{
@@ -390,42 +395,46 @@ $hook(void, WorldClient, handleMessage, const Connection::InMessage& message, Pl
 	{
 		voiceChatConnected = true;
 
-		int device = pickInputDevice(config.inputDevice);
-		if (device != -1)
+		initVoiceChatInput();
+		if (config.micEnabled)
 		{
-			if (audioStream.Information().state != Audijo::StreamState::Closed)
+			int device = pickInputDevice(config.inputDevice);
+			if (device != -1)
 			{
-				audioStream.Close();
-				while (audioStream.Information().state != Audijo::StreamState::Closed);
+				closeAudioStream();
+
+				buff = new Buffer<int16_t>(SAMPLE_RATE / 5); // 200ms of samples
+
+				uint32_t bufferFrames = FRAME_SIZE;
+
+				if (postProcessingBuffer)
+				{
+					free(postProcessingBuffer);
+				}
+
+				audioStream.Callback(inputCallback);
+
+				audioStream.Open({
+					.input = device,
+					.output = Audijo::NoDevice,
+					.bufferSize = FRAME_SIZE,
+					.sampleRate = SAMPLE_RATE,
+					.resampling = true
+					});
+
+				bufferFrames = audioStream.Information().bufferSize;
+
+				postProcessingBuffer = (int16_t*)malloc(bufferFrames * sizeof(int16_t));
+
+				audioStream.Start();
+
+				encoderThread = std::thread{ encoderThreadFunc, buff };
+				encoderThread.detach();
 			}
-
-			buff = new Buffer<int16_t>(SAMPLE_RATE / 5); // 200ms of samples
-
-			uint32_t bufferFrames = FRAME_SIZE;
-
-			if (postProcessingBuffer)
-			{
-				free(postProcessingBuffer);
-			}
-
-			audioStream.Callback(inputCallback);
-
-			audioStream.Open({
-				.input = device,
-				.output = Audijo::NoDevice,
-				.bufferSize = FRAME_SIZE,
-				.sampleRate = SAMPLE_RATE,
-				.resampling = true
-			});
-
-			bufferFrames = audioStream.Information().bufferSize;
-
-			postProcessingBuffer = (int16_t*)malloc(bufferFrames * sizeof(int16_t));
-
-			audioStream.Start();
-
-			encoderThread = std::thread{ encoderThreadFunc, buff };
-			encoderThread.detach();
+		}
+		else
+		{
+			closeAudioStream();
 		}
 
 		decoderThread = std::thread{ decoderThreadFunc };
@@ -500,6 +509,7 @@ $hook(void, Player, renderHud, GLFWwindow* window)
 
 	original(self, window);
 
+	if (StateGame::instanceObj.world->getType() == World::TYPE_CLIENT)
 	{
 		glDisable(GL_DEPTH_TEST);
 
@@ -613,19 +623,9 @@ inline static int getY(gui::Element* element)
 	return 0;
 }
 
-static bool initializedSettings = false;
-$hook(void, StateSettings, init, StateManager& s)
-{
-	initializedSettings = false;
-	original(self, s);
-}
-
-$hook(void, StateSettings, render, StateManager& s)
+$hookIDLate(settingsInit, void, StateSettings, init, StateManager& s)
 {
 	original(self, s);
-	if (initializedSettings) return;
-
-	initializedSettings = true;
 	int lowestY = 0;
 	for (auto& e : self->mainContentBox.elements)
 	{
@@ -669,37 +669,40 @@ void updateConfigValues(bool updateInputDevice)
 	updateMicFilter();
 	updateVoiceVolume();
 
-	int device = pickInputDevice(config.inputDevice);
-	if (updateInputDevice && voiceChatConnected && device != -1)
+	if (config.micEnabled)
 	{
-		if (audioStream.Information().state != Audijo::StreamState::Closed)
+		int device = pickInputDevice(config.inputDevice);
+		if (updateInputDevice && voiceChatConnected && device != -1)
 		{
-			audioStream.Close();
-			while (audioStream.Information().state != Audijo::StreamState::Closed);
+			closeAudioStream();
+
+			uint32_t bufferFrames = FRAME_SIZE;
+
+			if (postProcessingBuffer)
+			{
+				free(postProcessingBuffer);
+			}
+
+			audioStream.Callback(inputCallback);
+
+			audioStream.Open({
+				.input = device,
+				.output = Audijo::NoDevice,
+				.bufferSize = FRAME_SIZE,
+				.sampleRate = SAMPLE_RATE,
+				.resampling = true
+				});
+
+			bufferFrames = audioStream.Information().bufferSize;
+
+			postProcessingBuffer = (int16_t*)malloc(bufferFrames * sizeof(int16_t));
+
+			audioStream.Start();
 		}
-
-		uint32_t bufferFrames = FRAME_SIZE;
-
-		if (postProcessingBuffer)
-		{
-			free(postProcessingBuffer);
-		}
-
-		audioStream.Callback(inputCallback);
-
-		audioStream.Open({
-			.input = device,
-			.output = Audijo::NoDevice,
-			.bufferSize = FRAME_SIZE,
-			.sampleRate = SAMPLE_RATE,
-			.resampling = true
-			});
-
-		bufferFrames = audioStream.Information().bufferSize;
-
-		postProcessingBuffer = (int16_t*)malloc(bufferFrames * sizeof(int16_t));
-
-		audioStream.Start();
+	}
+	else
+	{
+		closeAudioStream();
 	}
 
 	if (config.deafened)

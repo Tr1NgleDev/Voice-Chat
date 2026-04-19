@@ -39,9 +39,9 @@ namespace Audijo
 				pointer operator->() { return &m_Frame[m_Index]; }
 
 				Iterator& operator++() { m_Index++; return *this; }
-				Iterator operator++(int) const { Iterator tmp = *this; ++(*this); return tmp; }
+				Iterator operator++(int) { Iterator tmp = *this; ++(*this); return tmp; }
 				Iterator& operator--() { m_Index--; return *this; }
-				Iterator operator--(int) const { Iterator tmp = *this; --(*this); return tmp; }
+				Iterator operator--(int) { Iterator tmp = *this; --(*this); return tmp; }
 				Iterator& operator+=(int v) { m_Index += v; return *this; }
 				Iterator& operator-=(int v) { m_Index -= v; return *this; }
 				Iterator operator+(int v) const { Iterator tmp = *this; tmp.m_Index += v; return tmp; }
@@ -112,9 +112,9 @@ namespace Audijo
 			pointer operator->() { return &m_ptr; }
 
 			Iterator& operator++() { m_ptr.m_Index++; return *this; }
-			Iterator operator++(int) const { Iterator tmp = *this; ++(*this); return tmp; }
+			Iterator operator++(int) { Iterator tmp = *this; ++(*this); return tmp; }
 			Iterator& operator--() { m_ptr.m_Index--; return *this; }
-			Iterator operator--(int) const { Iterator tmp = *this; --(*this); return tmp; }
+			Iterator operator--(int) { Iterator tmp = *this; --(*this); return tmp; }
 			Iterator& operator+=(int v) { m_ptr.m_Index += v; return *this; }
 			Iterator& operator-=(int v) { m_ptr.m_Index -= v; return *this; }
 			Iterator operator+(int v) const { Iterator tmp = *this; tmp.m_ptr.m_Index += v; return tmp; }
@@ -207,9 +207,9 @@ namespace Audijo
 				reference operator*() { return m_Frame[m_Index]; }
 
 				Iterator& operator++() { m_Index++; return *this; }
-				Iterator operator++(int) const { Iterator tmp = *this; ++(*this); return tmp; }
+				Iterator operator++(int) { Iterator tmp = *this; ++(*this); return tmp; }
 				Iterator& operator--() { m_Index--; return *this; }
-				Iterator operator--(int) const { Iterator tmp = *this; --(*this); return tmp; }
+				Iterator operator--(int) { Iterator tmp = *this; --(*this); return tmp; }
 				Iterator& operator+=(int v) { m_Index += v; return *this; }
 				Iterator& operator-=(int v) { m_Index -= v; return *this; }
 				Iterator operator+(int v) const { Iterator tmp = *this; tmp.m_Index += v; return tmp; }
