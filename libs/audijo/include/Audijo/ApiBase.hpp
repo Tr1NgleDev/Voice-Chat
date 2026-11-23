@@ -2,6 +2,7 @@
 
 #include "basicIncludes.hpp"
 #include "Callback.hpp"
+#include "int24_t.hpp"
 
 namespace Audijo 
 {
@@ -22,6 +23,7 @@ namespace Audijo
 		None,     // Swap   Float  Bytes
 		Int8       = 0x00 | 0x00 | 0x01,
 		Int16      = 0x00 | 0x00 | 0x02,
+		Int24      = 0x00 | 0x00 | 0x03,
 		Int32      = 0x00 | 0x00 | 0x04,
 		Float32    = 0x00 | 0x10 | 0x04,
 		Float64    = 0x00 | 0x10 | 0x08,

@@ -64,6 +64,7 @@ namespace Audijo
 		WasapiApi(bool loadDevices = true);
 		~WasapiApi() { Close(); }
 
+		std::string DefaultDeviceName(EDataFlow _flow);
 		const std::vector<DeviceInfo<Wasapi>>& Devices(bool reload = false);
 		const DeviceInfo<>* Device(int id) const override 
 		{ 

@@ -104,5 +104,8 @@
     <ClInclude Include="libs\audijo\include\Audijo\WasapiApi.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="libs\audijo\include\Audijo\int24_t.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

@@ -3,9 +3,41 @@
 #include "include/Audijo/WasapiApi.hpp"
 #include "include/Audijo/RingBuffer.hpp"
 
+inline static std::string getDeviceFriendlyName(IPropertyStore* _store)
+{
+	std::string _name = "Unknown device";
+
+	PROPVARIANT _prop;
+	PropVariantInit(&_prop);
+	if (SUCCEEDED(_store->GetValue(PKEY_Device_FriendlyName, &_prop)) && _prop.vt == VT_LPWSTR && _prop.pwszVal)
+	{
+		int _len = WideCharToMultiByte(CP_UTF8, 0, _prop.pwszVal, -1, nullptr, 0, nullptr, nullptr);
+		if (_len > 1)
+		{
+			_name.assign(_len - 1, '\0');
+			WideCharToMultiByte(CP_UTF8, 0, _prop.pwszVal, -1, _name.data(), _len, nullptr, nullptr);
+		}
+	}
+	PropVariantClear(&_prop);
+	return _name;
+}
+
 namespace Audijo
 {
 #define CHECK(x, msg, type) if (FAILED(x)) { LOGL(msg); type; }
+
+	std::string WasapiApi::DefaultDeviceName(EDataFlow _flow)
+	{
+		Pointer<IMMDevice> _defaultDev;
+		if (FAILED(m_DeviceEnumerator->GetDefaultAudioEndpoint(_flow, eConsole, &_defaultDev)))
+			return "";
+
+		Pointer<IPropertyStore> _store;
+		if (FAILED(_defaultDev->OpenPropertyStore(STGM_READ, &_store)))
+			return "";
+
+		return getDeviceFriendlyName(_store);
+	}
 
 	WasapiApi::WasapiApi(bool loadDevices)
 		: ApiBase()
@@ -38,31 +70,9 @@ namespace Audijo
 		for (uint64_t i = 0; i < m_Devices.size(); ++i)
 			_toDelete.push_back(i);
 
-		// Get default devices
-		Pointer<IMMDevice> _defaultIn;
-		Pointer<IMMDevice> _defaultOut;
-		CHECK(m_DeviceEnumerator->GetDefaultAudioEndpoint(eCapture, eConsole, &_defaultIn), "Unable to retrieve the default input device", return m_Devices);
-		CHECK(m_DeviceEnumerator->GetDefaultAudioEndpoint(eRender, eConsole, &_defaultOut), "Unable to retrieve the default output device", return m_Devices);
-
-		// Open the property store of the device to retrieve the name
-		Pointer<IPropertyStore> _defaultInPropertyStore;
-		Pointer<IPropertyStore> _defaultOutPropertyStore;
-		CHECK(_defaultIn->OpenPropertyStore(STGM_READ, &_defaultInPropertyStore), "Unable to open default device property store.", return m_Devices);
-		CHECK(_defaultOut->OpenPropertyStore(STGM_READ, &_defaultOutPropertyStore), "Unable to open default device property store.", return m_Devices);
-
 		// Collect the name of the default input from the property store
-		char _defaultInNameArr[64];
-		char _defaultOutNameArr[64];
-		Pointer<PROPVARIANT> _defaultInDeviceNameProp = new PROPVARIANT;
-		Pointer<PROPVARIANT> _defaultOutDeviceNameProp = new PROPVARIANT;
-		PropVariantInit(_defaultInDeviceNameProp);
-		PropVariantInit(_defaultOutDeviceNameProp);
-		CHECK(_defaultInPropertyStore->GetValue(PKEY_Device_FriendlyName, _defaultInDeviceNameProp), "Unable to retrieve default device name.", return m_Devices);
-		CHECK(_defaultOutPropertyStore->GetValue(PKEY_Device_FriendlyName, _defaultOutDeviceNameProp), "Unable to retrieve default device name.", return m_Devices);
-		errno_t errCode = 	wcstombs_s(nullptr, _defaultInNameArr, sizeof(_defaultInNameArr), _defaultInDeviceNameProp->pwszVal, sizeof(_defaultInNameArr)); // Copy the wstring to the char array
-		errCode = 			wcstombs_s(nullptr, _defaultOutNameArr, sizeof(_defaultOutNameArr), _defaultOutDeviceNameProp->pwszVal, sizeof(_defaultOutNameArr)); // Copy the wstring to the char array
-		std::string _defaultInName = _defaultInNameArr;
-		std::string _defaultOutName = _defaultOutNameArr;
+		std::string _defaultInName = DefaultDeviceName(eCapture);
+		std::string _defaultOutName = DefaultDeviceName(eRender);
 
 		// Count devices
 		uint32_t _count = 0;
@@ -80,15 +90,7 @@ namespace Audijo
 			// Open the property store of the device to retrieve the name
 			Pointer<IPropertyStore> _propertyStore;
 			CHECK(_dev->OpenPropertyStore(STGM_READ, &_propertyStore), "Unable to open device property store.", continue);
-
-			// Collect the name from the property store
-			char _nameArr[64];
-			Pointer<PROPVARIANT> _deviceNameProp = new PROPVARIANT;
-			PropVariantInit(_deviceNameProp);
-			CHECK(_propertyStore->GetValue(PKEY_Device_FriendlyName, _deviceNameProp), "Unable to retrieve device name.", continue);
-			const size_t nameArrSize = sizeof(_nameArr);
-			errCode = wcstombs_s(nullptr, _nameArr, nameArrSize, _deviceNameProp->pwszVal, nameArrSize); // Copy the wstring to the char array
-			std::string _name = _nameArr;
+			std::string _name = getDeviceFriendlyName(_propertyStore);
 
 			// Get the audio client from the device
 			Pointer<IAudioClient> _audioClient;
@@ -113,7 +115,9 @@ namespace Audijo
 			}
 
 			// Is it a default device? Use device name to check
-			bool _default = (_name == _defaultInName && _in > 0) || (_name == _defaultOutName && _out > 0);
+			bool _default =
+				(!_defaultInName.empty() && _name == _defaultInName && _in > 0) ||
+				(!_defaultOutName.empty() && _name == _defaultOutName && _out > 0);
 
 			// Wasapi only supports single sample rate
 			std::vector<double> _srates;
@@ -145,8 +149,8 @@ namespace Audijo
 		}
 
 		// Delete all devices we couldn't find again.
-		for (auto& i : _toDelete)
-			m_Devices.erase(m_Devices.begin() + i);
+		for (auto it = _toDelete.rbegin(); it != _toDelete.rend(); ++it)
+			m_Devices.erase(m_Devices.begin() + *it);
 
 		return m_Devices;
 	}
@@ -225,7 +229,7 @@ namespace Audijo
 				else if (_inFormat->wBitsPerSample == 16)
 					m_Information.deviceInFormat = Int16;
 				else if (_inFormat->wBitsPerSample == 24)
-					return UnsupportedSampleFormat;
+					m_Information.deviceInFormat = Int24;
 				else if (_inFormat->wBitsPerSample == 32)
 					m_Information.deviceInFormat = Int32;
 			}
@@ -268,7 +272,7 @@ namespace Audijo
 				else if (_outFormat->wBitsPerSample == 16)
 					m_Information.deviceOutFormat = Int16;
 				else if (_outFormat->wBitsPerSample == 24)
-					return UnsupportedSampleFormat;
+					m_Information.deviceOutFormat = Int24;
 				else if (_outFormat->wBitsPerSample == 32)
 					m_Information.deviceOutFormat = Int32;
 			}

@@ -3,27 +3,40 @@
 
 namespace Audijo
 {
+	template<typename T>
+	concept isInt = std::integral<T> || std::same_as<T, int24_t>;
+
 	template<typename In, typename Out>
 	void ConvertBufferTyped(char* outBuffer, char* inBuffer, size_t bufferSize)
 	{
 		Out* out = (Out*)outBuffer;
 		In* in = (In*)inBuffer;
-		for (size_t i = 0; i < bufferSize; i++)
+		for (size_t i = 0; i < bufferSize; ++i)
 		{
-			if constexpr (std::is_integral_v<In> && std::is_integral_v<Out>)
+			if constexpr (isInt<In> && isInt<Out>)
 			{
-				out[i] = (Out)in[i];
-				if (sizeof(Out) - sizeof(In) > 0 && sizeof(Out) - sizeof(In) < sizeof(Out) * 8)
-					out[i] <<= sizeof(Out) - sizeof(In);
+				constexpr int _inBits = sizeof(In) * 8;
+				constexpr int _outBits = sizeof(Out) * 8;
+
+				int64_t _v = (int64_t)in[i];
+				if constexpr (_outBits > _inBits)
+					_v <<= (_outBits - _inBits);
+				else if constexpr (_outBits < _inBits)
+					_v >>= (_inBits - _outBits);
+
+				out[i] = (Out)(int32_t)_v;
 			}
-			else if constexpr (std::is_floating_point_v<In> && std::is_floating_point_v<Out>)
+			else if constexpr (std::floating_point<In> && std::floating_point<Out>)
 				out[i] = (Out)in[i];
 
-			else if constexpr (std::is_floating_point_v<Out>)
+			else if constexpr (std::floating_point<Out>)
 				out[i] = (Out)in[i] / (Out)std::numeric_limits<In>::max();
 
 			else
-				out[i] = (Out)(in[i] * std::numeric_limits<Out>::max());
+			{
+				double _v = std::clamp((double)in[i], -1.0, 1.0);
+				out[i] = (Out)(_v * (double)std::numeric_limits<Out>::max());
+			}
 		}
 	}
 
@@ -74,6 +87,7 @@ namespace Audijo
 			switch (outFormat)
 			{
 			case Int16:   ConvertBufferTyped<int8_t, int16_t>(outBuffer, inBuffer, bufferSize); break;
+			case Int24:   ConvertBufferTyped<int8_t, int24_t>(outBuffer, inBuffer, bufferSize); break;
 			case Int32:   ConvertBufferTyped<int8_t, int32_t>(outBuffer, inBuffer, bufferSize); break;
 			case Float32: ConvertBufferTyped<int8_t, float>(outBuffer, inBuffer, bufferSize); break;
 			case Float64: ConvertBufferTyped<int8_t, double>(outBuffer, inBuffer, bufferSize); break;
@@ -83,16 +97,28 @@ namespace Audijo
 			switch (outFormat)
 			{
 			case Int8:    ConvertBufferTyped<int16_t, int8_t>(outBuffer, inBuffer, bufferSize); break;
+			case Int24:   ConvertBufferTyped<int16_t, int24_t>(outBuffer, inBuffer, bufferSize); break;
 			case Int32:   ConvertBufferTyped<int16_t, int32_t>(outBuffer, inBuffer, bufferSize); break;
 			case Float32: ConvertBufferTyped<int16_t, float>(outBuffer, inBuffer, bufferSize); break;
 			case Float64: ConvertBufferTyped<int16_t, double>(outBuffer, inBuffer, bufferSize); break;
 			default: std::copy(inBuffer, inBuffer + 2 * bufferSize, outBuffer);
+			} break;
+		case Int24:
+			switch (outFormat)
+			{
+			case Int8:    ConvertBufferTyped<int24_t, int8_t>(outBuffer, inBuffer, bufferSize); break;
+			case Int16:   ConvertBufferTyped<int24_t, int16_t>(outBuffer, inBuffer, bufferSize); break;
+			case Int32:   ConvertBufferTyped<int24_t, int32_t>(outBuffer, inBuffer, bufferSize); break;
+			case Float32: ConvertBufferTyped<int24_t, float>(outBuffer, inBuffer, bufferSize); break;
+			case Float64: ConvertBufferTyped<int24_t, double>(outBuffer, inBuffer, bufferSize); break;
+			default: std::copy(inBuffer, inBuffer + 3 * bufferSize, outBuffer);
 			} break;
 		case Int32:
 			switch (outFormat)
 			{
 			case Int8:    ConvertBufferTyped<int32_t, int8_t>(outBuffer, inBuffer, bufferSize); break;
 			case Int16:   ConvertBufferTyped<int32_t, int16_t>(outBuffer, inBuffer, bufferSize); break;
+			case Int24:   ConvertBufferTyped<int32_t, int24_t>(outBuffer, inBuffer, bufferSize); break;
 			case Float32: ConvertBufferTyped<int32_t, float>(outBuffer, inBuffer, bufferSize); break;
 			case Float64: ConvertBufferTyped<int32_t, double>(outBuffer, inBuffer, bufferSize); break;
 			default: std::copy(inBuffer, inBuffer + 4 * bufferSize, outBuffer);
@@ -102,6 +128,7 @@ namespace Audijo
 			{
 			case Int8:    ConvertBufferTyped<float, int8_t>(outBuffer, inBuffer, bufferSize); break;
 			case Int16:   ConvertBufferTyped<float, int16_t>(outBuffer, inBuffer, bufferSize); break;
+			case Int24:   ConvertBufferTyped<float, int24_t>(outBuffer, inBuffer, bufferSize); break;
 			case Int32:   ConvertBufferTyped<float, int32_t>(outBuffer, inBuffer, bufferSize); break;
 			case Float64: ConvertBufferTyped<float, double>(outBuffer, inBuffer, bufferSize); break;
 			default: std::copy(inBuffer, inBuffer + 4 * bufferSize, outBuffer);
@@ -111,6 +138,7 @@ namespace Audijo
 			{
 			case Int8:    ConvertBufferTyped<double, int8_t>(outBuffer, inBuffer, bufferSize); break;
 			case Int16:   ConvertBufferTyped<double, int16_t>(outBuffer, inBuffer, bufferSize); break;
+			case Int24:   ConvertBufferTyped<double, int24_t>(outBuffer, inBuffer, bufferSize); break;
 			case Int32:   ConvertBufferTyped<double, int32_t>(outBuffer, inBuffer, bufferSize); break;
 			case Float32: ConvertBufferTyped<double, float>(outBuffer, inBuffer, bufferSize); break;
 			default: std::copy(inBuffer, inBuffer + 8 * bufferSize, outBuffer);

@@ -117,6 +117,7 @@
     <ClInclude Include="libs\audijo\include\Audijo\basicIncludes.hpp" />
     <ClInclude Include="libs\audijo\include\Audijo\Buffer.hpp" />
     <ClInclude Include="libs\audijo\include\Audijo\Callback.hpp" />
+    <ClInclude Include="libs\audijo\include\Audijo\int24_t.hpp" />
     <ClInclude Include="libs\audijo\include\Audijo\RingBuffer.hpp" />
     <ClInclude Include="libs\audijo\include\Audijo\WasapiApi.hpp" />
     <ClInclude Include="MicFilter.h" />
